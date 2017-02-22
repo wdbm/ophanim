@@ -1,6 +1,6 @@
 # ophanim
 
-![](ophanim.png)
+![](https://raw.githubusercontent.com/wdbm/ophanim/master/ophanim.png)
 
 monitoring and notifications for measurements such as Bitcoin value and internet connection security
 
@@ -8,7 +8,7 @@ monitoring and notifications for measurements such as Bitcoin value and internet
 
 Ophanim is a monitoring program that is designed to be run in the background. It monitors measurements like Bitcoin price fluctuations and internet connection security and sends alerts about these things in the form of desktop notifications. Under consideration are Telegram report messages.
 
-![](notifications.gif)
+![](https://raw.githubusercontent.com/wdbm/ophanim/master/notifications.gif)
 
 # setup
 
