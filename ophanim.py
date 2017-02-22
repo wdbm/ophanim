@@ -49,7 +49,7 @@ options:
 """
 
 name    = "ophanim"
-version = "2017-02-22T2343Z"
+version = "2017-02-22T2346Z"
 logo    = None
 
 import datetime
@@ -89,8 +89,8 @@ def main(options):
     log.info("start monitoring -- Ctrl C to exit")
 
     propyte.notify(
-        text    = "{name} monitoring and alerting started".format(name = name),
-        icon    = "/usr/share/ucom/CERN-alias/icons/eye.svg"
+        text = "{name} monitoring and alerting started".format(name = name),
+        icon = "/usr/share/ucom/CERN-alias/icons/eye.svg"
     )
 
     startup = True
