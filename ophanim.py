@@ -49,7 +49,7 @@ options:
 """
 
 name    = "ophanim"
-version = "2017-02-22T2326Z"
+version = "2017-02-22T2337Z"
 logo    = None
 
 import datetime

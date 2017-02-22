@@ -8,8 +8,8 @@ import setuptools
 def main():
 
     setuptools.setup(
-        name             = "python_ophanim",
-        version          = "2017.02.22.2326",
+        name             = "ophanim",
+        version          = "2017.02.22.2337",
         description      = "monitoring and notifications for measurements such as Bitcoin value and internet connection security",
         long_description = long_description(),
         url              = "https://github.com/wdbm/ophanim",
