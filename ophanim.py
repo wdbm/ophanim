@@ -53,22 +53,24 @@ options:
     --recipientstelegram=TEXT  comma-separated recipients list      [default: none]
 """
 
-name    = "ophanim"
-version = "2017-03-15T0019Z"
-logo    = None
-
 import datetime
 import docopt
 import json
 import signal
 import textwrap
 import time
+import uuid
 import urllib2
 
 import denarius
 import propyte
 import pyprel
 import shijian
+
+name     = "ophanim"
+version  = "2017-03-15T1128Z"
+logo     = None
+instance = str(uuid.uuid4())
 
 def main(options):
 
