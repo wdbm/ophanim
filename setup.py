@@ -9,7 +9,7 @@ def main():
 
     setuptools.setup(
         name             = "ophanim",
-        version          = "2017.02.22.2343",
+        version          = "2017.03.15.0019",
         description      = "monitoring and notifications for measurements such as Bitcoin value and internet connection security",
         long_description = long_description(),
         url              = "https://github.com/wdbm/ophanim",
@@ -22,6 +22,7 @@ def main():
         install_requires = [
                            "denarius",
                            "propyte",
+                           "pyprel"
                            "shijian"
                            ],
         scripts          = [

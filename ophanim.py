@@ -36,20 +36,25 @@ usage:
     program [options]
 
 options:
-    -h, --help               display help message
-    --version                display version and exit
-    -v, --verbose            verbose logging
-    -s, --silent             silent
-    -u, --username=USERNAME  username
-    --timeloopreport=INT     time for report loop (s)  [default: 86400]
-    --timeloopmonitor=INT    time for monitor loop (s) [default: 1200]
-    --timeloopprocess=INT    time for process loop (s) [default: 10]
-    --bitcoin=BOOL           monitor Bitcoin value     [default: true]
-    --ip=BOOL                monitor IP data           [default: true]
+    -h, --help                 display help message
+    --version                  display version and exit
+    -v, --verbose              verbose logging
+    -s, --silent               silent
+    -u, --username=USERNAME    username
+
+    --timeintervalloop=INT     time between main process loops  (s) [default: 30]
+    --timeintervalip=INT       time between IP assessments      (s) [default: 600]
+    --timeintervalbitcoin=INT  time between Bitcoin assessments (s) [default: 1200]
+    --timeintervalreport=INT   time between reports being sent  (s) [default: 86400]
+
+    --ip=BOOL                  monitor IP data                      [default: true]
+    --bitcoin=BOOL             monitor Bitcoin value                [default: true]
+    --telegram=BOOL            use Telegram messaging               [default: true]
+    --recipientstelegram=TEXT  comma-separated recipients list      [default: none]
 """
 
 name    = "ophanim"
-version = "2017-02-22T2346Z"
+version = "2017-03-15T0019Z"
 logo    = None
 
 import datetime
@@ -62,9 +67,12 @@ import urllib2
 
 import denarius
 import propyte
+import pyprel
 import shijian
 
 def main(options):
+
+    # startup
 
     global program
     program = propyte.Program(
@@ -76,85 +84,153 @@ def main(options):
     global log
     from propyte import log
 
-    time_loop_report  = int(options["--timeloopreport"])
-    time_loop_monitor = int(options["--timeloopmonitor"])
-    time_loop_process = int(options["--timeloopprocess"])
-    monitor_Bitcoin   = options["--bitcoin"].lower() == "true"
-    monitor_IP        = options["--ip"].lower() == "true"
+    time_interval_loop    = int(options["--timeintervalloop"])
+    time_interval_IP      = int(options["--timeintervalip"])
+    time_interval_Bitcoin = int(options["--timeintervalbitcoin"])
+    time_interval_report  = int(options["--timeintervalreport"])
+    monitor_IP            = options["--ip"].lower() == "true"
+    monitor_Bitcoin       = options["--bitcoin"].lower() == "true"
+    program.use_Telegram  = options["--ip"].lower() == "true"
+    recipients_Telegram   = options["--recipientstelegram"].split(",")
 
+    clock_IP      = shijian.Clock(name = "IP")
+    clock_Bitcoin = shijian.Clock(name = "Bitcoin")
     clock_report  = shijian.Clock(name = "report")
-    clock_monitor = shijian.Clock(name = "monitor")
+
+    if program.use_Telegram:
+        propyte.start_messaging_Telegram()
 
     print("")
     log.info("start monitoring -- Ctrl C to exit")
+    print("")
 
+    text = "{name} monitoring and alerting started".format(name = name)
     propyte.notify(
-        text = "{name} monitoring and alerting started".format(name = name),
+        text = text,
         icon = "/usr/share/ucom/CERN-alias/icons/eye.svg"
     )
+    if program.use_Telegram:
+        propyte.send_message_Telegram(
+            recipients = recipients_Telegram,
+            text       = text
+        )
 
     startup = True
+
+    # main loop
+
     while True:
 
-        if monitor_Bitcoin:
+        if monitor_IP and (clock_IP.time() >= time_interval_IP or startup):
 
-            if startup or clock_monitor.time() >= time_loop_monitor:
+            pyprel.print_line()
+            log.info("assess IP")
+            pyprel.print_line()
+            message = assess_IP()
+            log.info(message)
+            clock_IP.reset()
+            clock_IP.start()
+
+        if (clock_report.time() >= time_interval_report or startup):
+
+            if program.use_Telegram:
+                pyprel.print_line()
+                log.info("send report")
+                pyprel.print_line()
                 print("")
-                log.info("assess Bitcoin")
-                assess_Bitcoin()
-
-        if monitor_IP:
-
-            if startup or clock_monitor.time() >= time_loop_monitor:
-                print("")
-                log.info("assess IP")
-                message = assess_IP()
-
-                if startup or clock_report.time() >= time_loop_report:
-                    print("")
-                    log.info("send report")
-                    # upcoming send message
-                    print(message)
-
-        if clock_report.time() >= time_loop_report:
+                propyte.send_message_Telegram(
+                    recipients = recipients_Telegram,
+                    text       = message
+                )
             clock_report.reset()
             clock_report.start()
-        if clock_monitor.time() >= time_loop_monitor:
-            clock_monitor.reset()
-            clock_monitor.start()
 
-        startup = False
+        if monitor_Bitcoin and (clock_Bitcoin.time() >= time_interval_Bitcoin or startup):
+
+            pyprel.print_line()
+            log.info("assess Bitcoin")
+            pyprel.print_line()
+            assess_Bitcoin()
+            clock_Bitcoin.reset()
+            clock_Bitcoin.start()
+
+        # display times to next actions
+
+        print("")
         message = "next {name} in {time}"
         log.info(message.format(
-            name = clock_monitor.name(),
+            name = "IP assessment",
             time = shijian.style_minimal_seconds(
-                       time_loop_monitor - clock_monitor.time()
+                       time_interval_IP - clock_IP.time()
                    )
         ))
         log.info(message.format(
-            name = clock_report.name(),
+            name = "Bitcoin assessment",
             time = shijian.style_minimal_seconds(
-                       time_loop_report - clock_report.time()
+                       time_interval_Bitcoin - clock_Bitcoin.time()
                    )
         ))
-        time.sleep(time_loop_process)
+        log.info(message.format(
+            name = "report",
+            time = shijian.style_minimal_seconds(
+                       time_interval_report - clock_report.time()
+                   )
+        ))
+
+        startup = False
+        time.sleep(time_interval_loop)
 
 def assess_Bitcoin():
 
+    # Bitcoin
+
     fluctuation_Bitcoin = denarius.fluctuation_value_Bitcoin(
-        days                      = 10,
-        factor_standard_deviation = 2.5,
-        details                   = True
+        details = True
     )
     if fluctuation_Bitcoin:
+        value_current = denarius.value_Bitcoin()
         log.info("Bitcoin price fluctuation detected")
         propyte.notify(
             text    = "Bitcoin price fluctuation detected",
             subtext = "current price: {value} EUR".format(
-                          value = denarius.value_Bitcoin()
+                          value = value_current
                       ),
             icon    = "/usr/share/ucom/CERN-alias/icons/Bitcoin.svg"
         )
+        if program.use_Telegram:
+            propyte.send_message_Telegram(
+                recipients = recipients_Telegram,
+                text       = "Bitcoin price fluctuation detected -- "\
+                             "current price: {value} EUR".format(
+                                 value = value_current
+                             )
+            )
+
+    print("")
+
+    # LocalBitcoins
+
+    fluctuation_LocalBitcoins = denarius.fluctuation_value_LocalBitcoins(
+        details = True
+    )
+    if fluctuation_LocalBitcoins:
+        value_current = denarius.values_Bitcoin_LocalBitcoin()[0]
+        log.info("LocalBitcoins price fluctuation detected")
+        propyte.notify(
+            text    = "LocalBitcoins price fluctuation detected",
+            subtext = "current price: {value} GBP".format(
+                          value = value_current
+                      ),
+            icon    = "/usr/share/ucom/CERN-alias/icons/Bitcoin.svg"
+        )
+        if program.use_Telegram:
+            propyte.send_message_Telegram(
+                recipients = recipients_Telegram,
+                text       = "LocalBitcoins price fluctuation detected -- "\
+                             "current price: {value} GBP".format(
+                                 value = value_current
+                             )
+            )
 
 def assess_IP():
 
