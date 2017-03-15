@@ -68,7 +68,7 @@ import pyprel
 import shijian
 
 name     = "ophanim"
-version  = "2017-03-15T1128Z"
+version  = "2017-03-15T2007Z"
 logo     = None
 instance = str(uuid.uuid4())
 
@@ -92,7 +92,7 @@ def main(options):
     time_interval_report  = int(options["--timeintervalreport"])
     monitor_IP            = options["--ip"].lower() == "true"
     monitor_Bitcoin       = options["--bitcoin"].lower() == "true"
-    program.use_Telegram  = options["--ip"].lower() == "true"
+    program.use_Telegram  = options["--telegram"].lower() == "true"
     recipients_Telegram   = options["--recipientstelegram"].split(",")
 
     clock_IP      = shijian.Clock(name = "IP")
