@@ -9,7 +9,7 @@ def main():
 
     setuptools.setup(
         name             = "ophanim",
-        version          = "2017.03.15.2007",
+        version          = "2017.04.18.1739",
         description      = "monitoring and notifications for measurements such as Bitcoin value and internet connection security",
         long_description = long_description(),
         url              = "https://github.com/wdbm/ophanim",
@@ -29,9 +29,9 @@ def main():
                            "ophanim.py"
                            ],
         entry_points     = """
-            [console_scripts]
-            ophanim = ophanim:ophanim
-        """
+                           [console_scripts]
+                           ophanim = ophanim:ophanim
+                           """
     )
 
 def long_description(
