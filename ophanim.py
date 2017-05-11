@@ -78,7 +78,7 @@ import pyprel
 import shijian
 
 name    = "ophanim"
-version = "2017-05-11T1805Z"
+version = "2017-05-11T1825Z"
 logo    = None
 
 def main(options):
@@ -319,8 +319,10 @@ def assess_Bitcoin():
     percentage_change_prediction_Bitcoin = (value_prediction_Bitcoin / value_current_Bitcoin) * 100 - 100
 
     if abs(percentage_change_prediction_Bitcoin) > 1.5 or send_report_now:
-        text = "linear prediction: Bitcoin value change by {percentage:.2f}% in ~2 days".format(
-            percentage = percentage_change_prediction_Bitcoin
+        text = "linear prediction: Bitcoin value change by {percentage:.2f}% in ~2 days (from current value {value_current_Bitcoin} GBP to {value_prediction_Bitcoin} GBP".format(
+            percentage               = percentage_change_prediction_Bitcoin,
+            value_current_Bitcoin    = value_current_Bitcoin,
+            value_prediction_Bitcoin = value_prediction_Bitcoin
         )
         propyte.notify(
             text    = text,
