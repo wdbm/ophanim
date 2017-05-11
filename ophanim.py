@@ -36,24 +36,31 @@ usage:
     program [options]
 
 options:
-    -h, --help                 display help message
-    --version                  display version and exit
-    -v, --verbose              verbose logging
-    -s, --silent               silent
-    -u, --username=USERNAME    username
+    -h, --help                        display help message
+    --version                         display version and exit
+    -v, --verbose                     verbose logging
+    -s, --silent                      silent
+    -u, --username=USERNAME           username
 
-    --timeintervalloop=INT     time between main process loops  (s) [default: 30]
-    --timeintervalip=INT       time between IP assessments      (s) [default: 600]
-    --timeintervalbitcoin=INT  time between Bitcoin assessments (s) [default: 1200]
-    --timeintervalreport=INT   time between reports being sent  (s) [default: 86400]
+    --timeintervalloop=INT            time between main process loops  (s) [default: 30]
+    --timeintervalip=INT              time between IP assessments      (s) [default: 600]
+    --timeintervalbitcoin=INT         time between Bitcoin assessments (s) [default: 1200]
+    --timeintervalreport=INT          time between reports being sent  (s) [default: 86400]
 
-    --ip=BOOL                  monitor IP data                      [default: true]
-    --bitcoin=BOOL             monitor Bitcoin value                [default: true]
-    --telegram=BOOL            use Telegram messaging               [default: false]
-    --recipientstelegram=TEXT  comma-separated recipients list      [default: none]
-    --pushbullet=BOOL          use Pushbullet messaging             [default: true]
-    --pushbullettoken=TEXT     Pushbullet token                     [default: none]
+    --ip=BOOL                         monitor IP data                      [default: true]
+    --bitcoin=BOOL                    monitor Bitcoin value                [default: true]
+
+    --telegram=BOOL                   use Telegram messaging               [default: false]
+    --recipientstelegram=TEXT         comma-separated recipients list      [default: none]
+
+    --pushbullet=BOOL                 use Pushbullet messaging             [default: true]
+    --recipientspushbullet=TEXT       comma-separated recipients list      [default: none]
+    --pushbullettoken=TEXT            Pushbullet token                     [default: none]
+
+    --databaselocalbitcoins=FILEPATH  filepath of LocalBitcoins database   [default: database_LocalBitcoins.db]
 """
+
+from __future__ import division
 
 import datetime
 import docopt
@@ -71,7 +78,7 @@ import pyprel
 import shijian
 
 name    = "ophanim"
-version = "2017-04-18T1739Z"
+version = "2017-05-11T1805Z"
 logo    = None
 
 def main(options):
@@ -88,16 +95,22 @@ def main(options):
     global log
     from propyte import log
 
-    time_interval_loop       = int(options["--timeintervalloop"])
-    time_interval_IP         = int(options["--timeintervalip"])
-    time_interval_Bitcoin    = int(options["--timeintervalbitcoin"])
-    time_interval_report     = int(options["--timeintervalreport"])
-    monitor_IP               = options["--ip"].lower() == "true"
-    monitor_Bitcoin          = options["--bitcoin"].lower() == "true"
-    program.use_Telegram     = options["--telegram"].lower() == "true"
-    recipients_Telegram      = options["--recipientstelegram"].split(",")
-    program.use_Pushbullet   = options["--pushbullet"].lower() == "true"
-    program.Pushbullet_token = options["--pushbullettoken"]
+    time_interval_loop                      = int(options["--timeintervalloop"])
+    time_interval_IP                        = int(options["--timeintervalip"])
+    time_interval_Bitcoin                   = int(options["--timeintervalbitcoin"])
+    time_interval_report                    = int(options["--timeintervalreport"])
+
+    monitor_IP                              = options["--ip"].lower() == "true"
+    monitor_Bitcoin                         = options["--bitcoin"].lower() == "true"
+
+    program.use_Telegram                    = options["--telegram"].lower() == "true"
+    program.recipients_Telegram             = options["--recipientstelegram"].split(",")
+
+    program.use_Pushbullet                  = options["--pushbullet"].lower() == "true"
+    program.recipients_Pushbullet           = options["--recipientspushbullet"].split(",")
+    program.Pushbullet_token                = options["--pushbullettoken"]
+
+    program.filepath_database_LocalBitcoins = options["--databaselocalbitcoins"]
 
     if program.Pushbullet_token == "none":
         program.Pushbullet_token = None
@@ -116,32 +129,23 @@ def main(options):
     print("")
 
     text = textwrap.dedent(
-    """
-        {name} monitoring and alerting started
+"""{time}
+{name} monitoring and alerting started
 
-        program instance:                 {instance}
-        time between IP assessments:      {time_interval_IP}
-        time between Bitcoin assessments: {time_interval_Bitcoin}
-        time between reports being sent:  {time_interval_report}
-        """.format(
-            name                  = name,
-            instance              = program.instance,
-            time_interval_IP      = time_interval_IP,
-            time_interval_Bitcoin = time_interval_Bitcoin,
-            time_interval_report  = time_interval_report
-        )
-    )
+time between IP assessments:\n{time_interval_IP}
+time between Bitcoin assessments:\n{time_interval_Bitcoin}
+time between reports being sent:\n{time_interval_report}""".format(
+        time                  = shijian.time_UTC(),
+        name                  = program.name,
+        time_interval_IP      = shijian.style_minimal_seconds(time_interval_IP),
+        time_interval_Bitcoin = shijian.style_minimal_seconds(time_interval_Bitcoin),
+        time_interval_report  = shijian.style_minimal_seconds(time_interval_report)
+    ))
     propyte.notify(
         text = text,
         icon = "/usr/share/ucom/CERN-alias/icons/eye.svg"
     )
-    if program.use_Telegram:
-        propyte.send_message_Telegram(
-            recipients = recipients_Telegram,
-            text       = text
-        )
-    if program.use_Pushbullet:
-        propyte.send_message_Pushbullet(text = text)
+    message(text = text)
 
     startup = True
 
@@ -149,34 +153,25 @@ def main(options):
 
     while True:
 
-        if monitor_IP and (clock_IP.time() >= time_interval_IP or startup):
+        if (clock_report.time() >= time_interval_report or startup):
+        
+            send_report_now = True
+            log.info("regular report")
+            message(text = "regular report\n" + assess_IP())
+            clock_report.reset()
+            clock_report.start()
+
+        if monitor_IP and (clock_IP.time() >= time_interval_IP or startup) or send_report_now:
 
             pyprel.print_line()
             log.info("assess IP")
             pyprel.print_line()
-            message = assess_IP()
-            log.info(message)
+            text = assess_IP()
+            log.info(text)
             clock_IP.reset()
             clock_IP.start()
 
-        if (clock_report.time() >= time_interval_report or startup):
-
-            if program.use_Telegram or program.use_Pushbullet:
-                pyprel.print_line()
-                log.info("send report")
-                pyprel.print_line()
-                print("")
-            if program.use_Telegram:
-                propyte.send_message_Telegram(
-                    recipients = recipients_Telegram,
-                    text       = message
-                )
-            if program.use_Pushbullet:
-                propyte.send_message_Pushbullet(text = message)
-            clock_report.reset()
-            clock_report.start()
-
-        if monitor_Bitcoin and (clock_Bitcoin.time() >= time_interval_Bitcoin or startup):
+        if monitor_Bitcoin and (clock_Bitcoin.time() >= time_interval_Bitcoin or startup) or send_report_now:
 
             pyprel.print_line()
             log.info("assess Bitcoin")
@@ -188,28 +183,44 @@ def main(options):
         # display times to next actions
 
         print("")
-        message = "next {name} in {time}"
-        log.info(message.format(
+        text = "next {name} in {time}"
+        log.info(text.format(
             name = "IP assessment",
             time = shijian.style_minimal_seconds(
                        time_interval_IP - clock_IP.time()
                    )
         ))
-        log.info(message.format(
+        log.info(text.format(
             name = "Bitcoin assessment",
             time = shijian.style_minimal_seconds(
                        time_interval_Bitcoin - clock_Bitcoin.time()
                    )
         ))
-        log.info(message.format(
+        log.info(text.format(
             name = "report",
             time = shijian.style_minimal_seconds(
                        time_interval_report - clock_report.time()
                    )
         ))
 
-        startup = False
+        startup         = False
+        send_report_now = False
         time.sleep(time_interval_loop)
+
+def message(
+    text = None
+    ):
+
+    if program.use_Telegram:
+        propyte.send_message_Telegram(
+            recipients = program.recipients_Telegram,
+            text       = text
+        )
+    if program.use_Pushbullet:
+        propyte.send_message_Pushbullet(
+            recipients = program.recipients_Pushbullet,
+            text       = text
+        )
 
 def assess_Bitcoin():
 
@@ -219,36 +230,28 @@ def assess_Bitcoin():
         details = True
     )
     if fluctuation_Bitcoin:
-        value_current = denarius.value_Bitcoin()
+        value_current = denarius.value_Bitcoin(currency = "GBP")
         log.info("Bitcoin price fluctuation detected")
         propyte.notify(
             text    = "Bitcoin price fluctuation detected",
-            subtext = "current price: {value} EUR".format(
+            subtext = "current price: {value} GBP".format(
                           value = value_current
                       ),
             icon    = "/usr/share/ucom/CERN-alias/icons/Bitcoin.svg"
         )
-        if program.use_Telegram:
-            propyte.send_message_Telegram(
-                recipients = recipients_Telegram,
-                text       = "Bitcoin price fluctuation detected -- "\
-                             "current price: {value} EUR".format(
-                                 value = value_current
-                             )
-            )
-        if program.use_Pushbullet:
-            propyte.send_message_Pushbullet(
-                text       = "Bitcoin price fluctuation detected -- "\
-                             "current price: {value} EUR".format(
-                                 value = value_current
-                             )
-            )
+        text = "Bitcoin price fluctuation detected -- "\
+               "current price: {value} GBP".format(
+                   value = value_current
+               )
+        message(text = text)
 
     print("")
 
     # LocalBitcoins
 
-    if os.path.isfile("database_LocalBitcoins.db"):
+    if os.path.isfile(program.filepath_database_LocalBitcoins):
+
+        #program.filepath_database_LocalBitcoins
 
         fluctuation_LocalBitcoins = denarius.fluctuation_value_LocalBitcoins(
             details = True
@@ -263,25 +266,67 @@ def assess_Bitcoin():
                           ),
                 icon    = "/usr/share/ucom/CERN-alias/icons/Bitcoin.svg"
             )
-            if program.use_Telegram:
-                propyte.send_message_Telegram(
-                    recipients = recipients_Telegram,
-                    text       = "LocalBitcoins price fluctuation detected -- "\
-                                 "current price: {value} GBP".format(
-                                     value = value_current
-                                 )
-                )
-            if program.use_Pushbullet:
-                propyte.send_message_Pushbullet(
-                    text       = "LocalBitcoins price fluctuation detected -- "\
-                                 "current price: {value} GBP".format(
-                                     value = value_current
-                                 )
-                )
+            text = "LocalBitcoins price fluctuation detected -- "\
+                   "current price: {value} GBP".format(
+                       value = value_current
+                   )
+            message(text = text)
 
     else:
 
         log.warning("LocalBitcoins database not found")
+
+    # Bitcoin versus LocalBitcoins
+
+    value_current_Bitcoin           = denarius.value_Bitcoin(currency = "GBP")
+    value_current_LocalBitcoins_low = denarius.values_Bitcoin_LocalBitcoin()[0]
+    delta = abs(value_current_LocalBitcoins_low - value_current_Bitcoin)
+    
+    if value_current_LocalBitcoins_low < value_current_Bitcoin:
+        text = "LocalBitcoins lowest value detected that is lower than current Bitcoin value -- purchase?\n\n"\
+               "LocalBitcoins lowest value: {value_current_LocalBitcoins_low};\n"\
+               "Bitcoin value: {value_current_Bitcoin}".format(
+                   value_current_LocalBitcoins_low = value_current_LocalBitcoins_low,
+                   value_current_Bitcoin           = value_current_Bitcoin
+               )
+        print text
+    if value_current_LocalBitcoins_low > value_current_Bitcoin + 2 * delta:
+        text = "LocalBitcoins lowest value detected that is unusually higher than current Bitcoin value -- sell?\n\n"\
+               "LocalBitcoins lowest valus: {value_current_LocalBitcoins_low};\n"\
+               "Bitcoin value: {value_current_Bitcoin}".format(
+                   value_current_LocalBitcoins_low = value_current_LocalBitcoins_low,
+                   value_current_Bitcoin           = value_current_Bitcoin
+               )
+    else:
+        text = None
+
+    if text:
+        log.info(text)
+        propyte.notify(
+            text    = text,
+            icon    = "/usr/share/ucom/CERN-alias/icons/Bitcoin.svg"
+        )
+        message(text = text)
+
+    # linear prediction
+
+    value_prediction_Bitcoin = denarius.value_prediction_linear_Bitcoin(
+        days_past   = 5,
+        days_future = 2,
+        currency    = "GBP"
+    )
+
+    percentage_change_prediction_Bitcoin = (value_prediction_Bitcoin / value_current_Bitcoin) * 100 - 100
+
+    if abs(percentage_change_prediction_Bitcoin) > 1.5 or send_report_now:
+        text = "linear prediction: Bitcoin value change by {percentage:.2f}% in ~2 days".format(
+            percentage = percentage_change_prediction_Bitcoin
+        )
+        propyte.notify(
+            text    = text,
+            icon    = "/usr/share/ucom/CERN-alias/icons/Bitcoin.svg"
+        )
+        message(text = text)
 
 def assess_IP():
 
@@ -318,7 +363,7 @@ def assess_IP():
         )
     else:
         warning_country = ""
-    message = textwrap.dedent(
+    text = textwrap.dedent(
         """
         IP details:
         
@@ -330,18 +375,18 @@ def assess_IP():
         country:      {country} {warning_country}
         region:       {region}
         """.format(
-            IP              = IP              if IP              else "unknown",
+            IP              = IP              if IP           else "unknown",
             warning_IP      = warning_IP                                       ,
-            organisation    = organisation    if organisation    else "unknown",
-            hostname        = hostname        if hostname        else "unknown",
-            coordinates     = coordinates     if coordinates     else "unknown",
-            city            = city            if city            else "unknown",
-            country         = country         if country         else "unknown",
+            organisation    = organisation    if organisation else "unknown",
+            hostname        = hostname        if hostname     else "unknown",
+            coordinates     = coordinates     if coordinates  else "unknown",
+            city            = city            if city         else "unknown",
+            country         = country         if country      else "unknown",
             warning_country = warning_country                                  ,
-            region          = region          if region          else "unknown"
+            region          = region          if region       else "unknown"
         )
     )
-    return message
+    return text
 
 def signal_handler(signal, frame):
     program.terminate()
