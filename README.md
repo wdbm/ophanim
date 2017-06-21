@@ -24,7 +24,11 @@ ophanim.py --help
 ```
 
 ```Bash
-ophanim.py --recipientstelegram="@username"
+ophanim.py --recipients_Telegram="@username"
+```
+
+```Bash
+ophanim.py --IP=false --alert_if_Bitcoin_less_than=2200
 ```
 
 # links

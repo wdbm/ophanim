@@ -36,28 +36,30 @@ usage:
     program [options]
 
 options:
-    -h, --help                        display help message
-    --version                         display version and exit
-    -v, --verbose                     verbose logging
-    -s, --silent                      silent
-    -u, --username=USERNAME           username
+    -h, --help                             display help message
+    --version                              display version and exit
+    -v, --verbose                          verbose logging
+    -s, --silent                           silent
+    -u, --username=USERNAME                username
 
-    --timeintervalloop=INT            time between main process loops  (s) [default: 30]
-    --timeintervalip=INT              time between IP assessments      (s) [default: 600]
-    --timeintervalbitcoin=INT         time between Bitcoin assessments (s) [default: 1200]
-    --timeintervalreport=INT          time between reports being sent  (s) [default: 86400]
+    --time_interval_loop=INT               time between main process loops  (s)               [default: 30]
+    --time_interval_IP=INT                 time between IP assessments      (s)               [default: 600]
+    --time_interval_Bitcoin=INT            time between Bitcoin assessments (s)               [default: 1200]
+    --time_interval_report=INT             time between reports being sent  (s)               [default: 86400]
 
-    --ip=BOOL                         monitor IP data                      [default: true]
-    --bitcoin=BOOL                    monitor Bitcoin value                [default: true]
+    --IP=BOOL                              monitor IP data                                    [default: true]
+    --Bitcoin=BOOL                         monitor Bitcoin value                              [default: true]
+    --alert_if_Bitcoin_greater_than=FLOAT  alert if Bitcoin is greater than this value (GBP)  [default: none]
+    --alert_if_Bitcoin_less_than=FLOAT     alert if Bitcoin is less than this value (GBP)     [default: none]
 
-    --telegram=BOOL                   use Telegram messaging               [default: false]
-    --recipientstelegram=TEXT         comma-separated recipients list      [default: none]
+    --Pushbullet=BOOL                      use Pushbullet messaging                           [default: true]
+    --recipients_Pushbullet=TEXT           comma-separated recipients list                    [default: none]
+    --Pushbullet_token=TEXT                Pushbullet token                                   [default: none]
 
-    --pushbullet=BOOL                 use Pushbullet messaging             [default: true]
-    --recipientspushbullet=TEXT       comma-separated recipients list      [default: none]
-    --pushbullettoken=TEXT            Pushbullet token                     [default: none]
+    --Telegram=BOOL                        use Telegram messaging                             [default: false]
+    --recipients_Telegram=TEXT             comma-separated recipients list                    [default: none]
 
-    --databaselocalbitcoins=FILEPATH  filepath of LocalBitcoins database   [default: database_LocalBitcoins.db]
+    --database_LocalBitcoins=FILEPATH      filepath of LocalBitcoins database                 [default: database_LocalBitcoins.db]
 """
 
 from __future__ import division
@@ -78,7 +80,7 @@ import pyprel
 import shijian
 
 name    = "ophanim"
-version = "2017-05-11T1855Z"
+version = "2017-06-21T2044Z"
 logo    = None
 
 def main(options):
@@ -95,23 +97,33 @@ def main(options):
     global log
     from propyte import log
 
-    time_interval_loop                      = int(options["--timeintervalloop"])
-    time_interval_IP                        = int(options["--timeintervalip"])
-    time_interval_Bitcoin                   = int(options["--timeintervalbitcoin"])
-    time_interval_report                    = int(options["--timeintervalreport"])
+    time_interval_loop                      = int(options["--time_interval_loop"])
+    time_interval_IP                        = int(options["--time_interval_IP"])
+    time_interval_Bitcoin                   = int(options["--time_interval_Bitcoin"])
+    time_interval_report                    = int(options["--time_interval_report"])
 
-    monitor_IP                              = options["--ip"].lower() == "true"
-    monitor_Bitcoin                         = options["--bitcoin"].lower() == "true"
+    monitor_IP                              = options["--IP"].lower() == "true"
+    monitor_Bitcoin                         = options["--Bitcoin"].lower() == "true"
+    program.alert_if_Bitcoin_greater_than   = options["--alert_if_Bitcoin_greater_than"]
+    program.alert_if_Bitcoin_less_than      = options["--alert_if_Bitcoin_less_than"]
 
-    program.use_Telegram                    = options["--telegram"].lower() == "true"
-    program.recipients_Telegram             = options["--recipientstelegram"].split(",")
+    program.use_Telegram                    = options["--Telegram"].lower() == "true"
+    program.recipients_Telegram             = options["--recipients_Telegram"].split(",")
 
-    program.use_Pushbullet                  = options["--pushbullet"].lower() == "true"
-    program.recipients_Pushbullet           = options["--recipientspushbullet"].split(",")
-    program.Pushbullet_token                = options["--pushbullettoken"]
+    program.use_Pushbullet                  = options["--Pushbullet"].lower() == "true"
+    program.recipients_Pushbullet           = options["--recipients_Pushbullet"].split(",")
+    program.Pushbullet_token                = options["--Pushbullet_token"]
 
-    program.filepath_database_LocalBitcoins = options["--databaselocalbitcoins"]
+    program.filepath_database_LocalBitcoins = options["--database_LocalBitcoins"]
 
+    if program.alert_if_Bitcoin_greater_than == "none":
+        program.alert_if_Bitcoin_greater_than = None
+    else:
+        program.alert_if_Bitcoin_greater_than = float(program.alert_if_Bitcoin_greater_than)
+    if program.alert_if_Bitcoin_less_than == "none":
+        program.alert_if_Bitcoin_less_than = None
+    else:
+        program.alert_if_Bitcoin_less_than = float(program.alert_if_Bitcoin_less_than)
     if program.Pushbullet_token == "none":
         program.Pushbullet_token = None
 
@@ -147,7 +159,10 @@ time between reports being sent:\n{time_interval_report}""".format(
     )
     message(text = text)
 
-    startup = True
+    global startup
+    global send_report_now
+    startup         = True
+    send_report_now = False
 
     # main loop
 
@@ -249,26 +264,25 @@ def assess_Bitcoin():
 
     # LocalBitcoins
 
-    if os.path.isfile(program.filepath_database_LocalBitcoins):
+    value_current_LocalBitcoins_low = denarius.values_Bitcoin_LocalBitcoin()[0]
 
-        #program.filepath_database_LocalBitcoins
+    if os.path.isfile(program.filepath_database_LocalBitcoins):
 
         fluctuation_LocalBitcoins = denarius.fluctuation_value_LocalBitcoins(
             details = True
         )
         if fluctuation_LocalBitcoins:
-            value_current = denarius.values_Bitcoin_LocalBitcoin()[0]
             log.info("LocalBitcoins price fluctuation detected")
             propyte.notify(
                 text    = "LocalBitcoins price fluctuation detected",
                 subtext = "current price: {value} GBP".format(
-                              value = value_current
+                              value = value_current_LocalBitcoins_low
                           ),
                 icon    = "/usr/share/ucom/CERN-alias/icons/Bitcoin.svg"
             )
             text = "LocalBitcoins price fluctuation detected -- "\
                    "current price: {value} GBP".format(
-                       value = value_current
+                       value = value_current_LocalBitcoins_low
                    )
             message(text = text)
 
@@ -278,10 +292,10 @@ def assess_Bitcoin():
 
     # Bitcoin versus LocalBitcoins
 
-    value_current_Bitcoin           = denarius.value_Bitcoin(currency = "GBP")
-    value_current_LocalBitcoins_low = denarius.values_Bitcoin_LocalBitcoin()[0]
+    value_current_Bitcoin = denarius.value_Bitcoin(currency = "GBP")
     delta = abs(value_current_LocalBitcoins_low - value_current_Bitcoin)
-    
+
+    text = None
     if value_current_LocalBitcoins_low < value_current_Bitcoin:
         text = "LocalBitcoins lowest value detected that is lower than current Bitcoin value -- purchase?\n\n"\
                "LocalBitcoins lowest value: {value_current_LocalBitcoins_low};\n"\
@@ -289,16 +303,37 @@ def assess_Bitcoin():
                    value_current_LocalBitcoins_low = value_current_LocalBitcoins_low,
                    value_current_Bitcoin           = value_current_Bitcoin
                )
-        print text
-    if value_current_LocalBitcoins_low > value_current_Bitcoin + 2 * delta:
+    elif value_current_LocalBitcoins_low > value_current_Bitcoin + 2 * delta:
         text = "LocalBitcoins lowest value detected that is unusually higher than current Bitcoin value -- sell?\n\n"\
                "LocalBitcoins lowest valus: {value_current_LocalBitcoins_low};\n"\
                "Bitcoin value: {value_current_Bitcoin}".format(
                    value_current_LocalBitcoins_low = value_current_LocalBitcoins_low,
                    value_current_Bitcoin           = value_current_Bitcoin
                )
-    else:
-        text = None
+
+    if text:
+        log.info(text)
+        propyte.notify(
+            text    = text,
+            icon    = "/usr/share/ucom/CERN-alias/icons/Bitcoin.svg"
+        )
+        message(text = text)
+
+    # alerts for greater than or less than specified values
+
+    text = None
+    if program.alert_if_Bitcoin_greater_than is not None:
+        if program.alert_if_Bitcoin_greater_than > value_current_LocalBitcoins_low:
+            text = "specified high value {alert_if_Bitcoin_greater_than} GBP > LocalBitcoins lowest value {value_current_LocalBitcoins_low}".format(
+                alert_if_Bitcoin_greater_than   = program.alert_if_Bitcoin_greater_than,
+                value_current_LocalBitcoins_low = value_current_LocalBitcoins_low
+            )
+    if program.alert_if_Bitcoin_less_than is not None:
+        if value_current_LocalBitcoins_low < program.alert_if_Bitcoin_less_than:
+            text = "LocalBitcoins lowest value {value_current_LocalBitcoins_low} < specified low value {alert_if_Bitcoin_less_than} GBP".format(
+                alert_if_Bitcoin_less_than      = program.alert_if_Bitcoin_less_than,
+                value_current_LocalBitcoins_low = value_current_LocalBitcoins_low
+            )
 
     if text:
         log.info(text)
